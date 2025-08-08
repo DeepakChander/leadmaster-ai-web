@@ -53,6 +53,18 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Brand & accents */
+    --brand: 222 85% 45%; /* Deep blue */
+    --brand-2: 210 90% 55%; /* Electric blue */
+    --accent-green: 150 60% 45%;
+    --hero-foreground: 0 0% 100%;
+    --brand-ring: 210 90% 60%;
+
+    /* Gradients & shadows */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--brand)) 0%, hsl(var(--brand-2)) 100%);
+    --shadow-elevated: 0 10px 30px -10px hsl(var(--brand) / 0.35);
+    --shadow-glow: 0 0 40px hsl(var(--brand-2) / 0.45);
   }
 
   .dark {
@@ -91,6 +103,17 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Brand & accents (dark) */
+    --brand: 217 85% 62%;
+    --brand-2: 199 89% 62%;
+    --accent-green: 150 60% 45%;
+    --hero-foreground: 0 0% 100%;
+    --brand-ring: 217 85% 62%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(var(--brand)) 0%, hsl(var(--brand-2)) 100%);
+    --shadow-elevated: 0 10px 30px -10px hsl(var(--brand) / 0.35);
+    --shadow-glow: 0 0 40px hsl(var(--brand-2) / 0.45);
   }
 }
 
@@ -100,6 +123,39 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
 }
+
+/* Animations */
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes slide-in-right {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+
+@layer utilities {
+  .animate-fade-in { animation: fade-in 0.35s ease-out both; }
+  .animate-scale-in { animation: scale-in 0.25s ease-out both; }
+  .animate-slide-in-right { animation: slide-in-right 0.3s ease-out both; }
+  .hover-scale { @apply transition-transform duration-200 hover:scale-105; }
+  .gradient-text { @apply bg-clip-text text-transparent; background-image: var(--gradient-primary); }
+  .glass { @apply backdrop-blur-md; background: color-mix(in hsl, hsl(var(--background)) 70%, transparent); }
+}
+
+/* Link underline animation */
+.story-link { position: relative; display: inline-block; }
+.story-link::after {
+  content: "";
+  position: absolute; left: 0; bottom: -2px; height: 2px; width: 100%;
+  transform-origin: bottom right; transform: scaleX(0);
+  background: hsl(var(--brand-2)); transition: transform 200ms ease;
+}
+.story-link:hover::after { transform: scaleX(1); transform-origin: bottom left; }
