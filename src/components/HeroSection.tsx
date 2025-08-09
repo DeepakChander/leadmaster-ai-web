@@ -1,5 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Sparkles } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { CheckCircle, Sparkles, Search, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { useLeadsRealtime } from "@/hooks/useLeadsRealtime";
+import LeadsResults from "@/components/LeadsResults";
 
 const benefits = [
   "AI-powered Google Maps scraping",
@@ -8,7 +13,91 @@ const benefits = [
 ];
 
 const HeroSection = () => {
-  const scrollToLead = () => document.getElementById("lead")?.scrollIntoView({ behavior: "smooth" });
+  const { toast } = useToast();
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [progressIndex, setProgressIndex] = useState(0);
+  const { leads, startNewSession, clear } = useLeadsRealtime("leads");
+  const progressMessages = [
+    "Searching Google Maps...",
+    "Processing results...",
+    "Preparing leads...",
+  ];
+  const intervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (loading) {
+      intervalRef.current = window.setInterval(() => {
+        setProgressIndex((i) => (i + 1) % progressMessages.length);
+      }, 1500);
+    } else if (intervalRef.current) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      setProgressIndex(0);
+    }
+
+    return () => {
+      if (intervalRef.current) window.clearInterval(intervalRef.current);
+    };
+  }, [loading]);
+
+  const generateSessionId = () =>
+    (crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const submitQuery = async (userInput: string) => {
+    const webhookUrl =
+      "https://toolsagentn8n.app.n8n.cloud/webhook/e5c0f357-c0a4-4ebc-9162-0382d8009539/chat";
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+    try {
+      setLoading(true);
+      clear();
+      await startNewSession();
+
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          chatInput: userInput,
+          action: "sendMessage",
+          sessionId: generateSessionId(),
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
+      // We rely on Supabase real-time inserts for results.
+      await response.json().catch(() => undefined);
+      toast({ title: "Query sent", description: "Collecting new leads in real time..." });
+    } catch (error: any) {
+      const msg =
+        error?.name === "AbortError"
+          ? "Request timed out. Please try again."
+          : error?.message || "Something went wrong";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      window.clearTimeout(timeout);
+      setLoading(false);
+    }
+  };
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = query?.trim();
+    if (!value) {
+      toast({ title: "Enter a search", description: "e.g. Find restaurants in Paris, France" });
+      return;
+    }
+    submitQuery(value);
+  };
 
   return (
     <section id="home" className="pt-28 pb-16 md:pt-32 md:pb-24">
@@ -22,14 +111,36 @@ const HeroSection = () => {
             Generate High-Quality Business Leads <span className="gradient-text">Instantly</span>
           </h1>
           <p className="text-muted-foreground text-lg">
-            Search Google Maps with AI, process results, and export clean business contacts — all in one place.
+            AI-powered Google Maps scraping to find verified business contacts in any location worldwide
           </p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button variant="hero" size="lg" onClick={scrollToLead}>
-              Start Generating Leads
-            </Button>
-            <a href="#how-it-works" className="story-link self-center sm:self-auto">See how it works</a>
-          </div>
+
+          {/* Single Search Bar */}
+          <form onSubmit={onSubmit} className="w-full">
+            <div className="w-full max-w-2xl md:min-w-[400px]">
+              <div className="flex items-center gap-2 rounded-lg border border-border p-2 bg-background shadow-sm">
+                <Search className="text-muted-foreground ml-1" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Find restaurants in Paris, France"
+                  className="border-0 focus-visible:ring-0"
+                />
+                <Button type="submit" variant="hero" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating
+                    </>
+                  ) : (
+                    "Generate Leads"
+                  )}
+                </Button>
+              </div>
+              {loading && (
+                <p className="mt-2 text-sm text-muted-foreground animate-fade-in">{progressMessages[progressIndex]}</p>
+              )}
+            </div>
+          </form>
+
           <ul className="grid gap-2">
             {benefits.map((b) => (
               <li key={b} className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -47,8 +158,12 @@ const HeroSection = () => {
           </div>
         </div>
       </div>
+
+      {/* Results */}
+      <LeadsResults leads={leads} />
     </section>
   );
 };
 
 export default HeroSection;
+

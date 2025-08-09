@@ -1,6 +1,6 @@
 import HeaderNav from "@/components/HeaderNav";
 import HeroSection from "@/components/HeroSection";
-import LeadGenerator from "@/components/LeadGenerator";
+
 import { ShieldCheck, Zap, Database } from "lucide-react";
 
 const Index = () => {
@@ -9,7 +9,7 @@ const Index = () => {
       <HeaderNav />
       <main>
         <HeroSection />
-        <LeadGenerator />
+        
 
         <section id="features" className="py-16">
           <div className="container mx-auto grid md:grid-cols-3 gap-6">
