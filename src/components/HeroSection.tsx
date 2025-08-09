@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useLeadsRealtime } from "@/hooks/useLeadsRealtime";
 import LeadsResults from "@/components/LeadsResults";
+import ClarificationChat from "@/components/ClarificationChat";
 
 const benefits = [
   "AI-powered Google Maps scraping",
@@ -24,6 +25,25 @@ const HeroSection = () => {
     "Preparing leads...",
   ];
   const intervalRef = useRef<number | null>(null);
+
+  // Session + Clarification chat state
+  const sessionIdRef = useRef<string | null>(null);
+  const [isClarificationOpen, setClarificationOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{ role: "assistant" | "user"; text: string }[]>([]);
+  const [isBotTyping, setBotTyping] = useState(false);
+
+  const isClarificationOutput = (output?: string) => {
+    if (!output) return false;
+    const clarificationKeywords = [
+      "country code",
+      "which country",
+      "please specify",
+      "need more information",
+      "clarify",
+    ];
+    const lower = output.toLowerCase();
+    return clarificationKeywords.some((k) => lower.includes(k));
+  };
 
   useEffect(() => {
     if (loading) {
@@ -53,8 +73,22 @@ const HeroSection = () => {
 
     try {
       setLoading(true);
+
+      // Start a fresh session for new query
+      sessionIdRef.current = generateSessionId();
       clear();
       await startNewSession();
+
+      const body = {
+        // Legacy payload (if workflow expects these)
+        chatInput: userInput,
+        action: "sendMessage",
+        sessionId: sessionIdRef.current,
+        // New bidirectional chat payload (if workflow expects these)
+        message: userInput,
+        session_id: sessionIdRef.current,
+        timestamp: new Date().toISOString(),
+      } as any;
 
       const response = await fetch(webhookUrl, {
         method: "POST",
@@ -62,11 +96,7 @@ const HeroSection = () => {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          chatInput: userInput,
-          action: "sendMessage",
-          sessionId: generateSessionId(),
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
@@ -74,9 +104,17 @@ const HeroSection = () => {
         throw new Error(`Request failed: ${response.status}`);
       }
 
-      // We rely on Supabase real-time inserts for results.
-      await response.json().catch(() => undefined);
-      toast({ title: "Query sent", description: "Collecting new leads in real time..." });
+      const result = await response.json().catch(() => undefined as any);
+
+      const output: string | undefined = result?.output ?? result?.message ?? result?.text;
+      const needsClarification = result?.type === "clarification" || isClarificationOutput(output);
+
+      if (needsClarification) {
+        setClarificationOpen(true);
+        setChatMessages((prev) => [...prev, { role: "assistant", text: output || "I need a quick clarification to proceed." }]);
+      } else {
+        toast({ title: "Query sent", description: "Collecting new leads in real time..." });
+      }
     } catch (error: any) {
       const msg =
         error?.name === "AbortError"
@@ -86,6 +124,60 @@ const HeroSection = () => {
     } finally {
       window.clearTimeout(timeout);
       setLoading(false);
+    }
+  };
+
+  const handleSendFollowUp = async (message: string) => {
+    const webhookUrl =
+      "https://toolsagentn8n.app.n8n.cloud/webhook/e5c0f357-c0a4-4ebc-9162-0382d8009539/chat";
+
+    // Append user message immediately
+    setChatMessages((prev) => [...prev, { role: "user", text: message }]);
+    setBotTyping(true);
+
+    try {
+      if (!sessionIdRef.current) {
+        sessionIdRef.current = generateSessionId();
+      }
+
+      const body = {
+        // Legacy
+        chatInput: message,
+        action: "sendMessage",
+        sessionId: sessionIdRef.current,
+        // New bidirectional
+        message,
+        session_id: sessionIdRef.current,
+        is_follow_up: true,
+        timestamp: new Date().toISOString(),
+      } as any;
+
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json().catch(() => undefined as any);
+      const output: string | undefined = result?.output ?? result?.message ?? result?.text;
+      const needsClarification = result?.type === "clarification" || isClarificationOutput(output);
+
+      if (needsClarification) {
+        setChatMessages((prev) => [...prev, { role: "assistant", text: output || "Got it. One more detail please…" }]);
+      } else {
+        setClarificationOpen(false);
+        if (output) {
+          setChatMessages((prev) => [...prev, { role: "assistant", text: output }]);
+        }
+        // Results will stream via Supabase in real time
+      }
+    } catch (error: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "There was an error. Please try again in a moment." },
+      ]);
+    } finally {
+      setBotTyping(false);
     }
   };
 
@@ -161,6 +253,13 @@ const HeroSection = () => {
 
       {/* Results */}
       <LeadsResults leads={leads} />
+      <ClarificationChat
+        open={isClarificationOpen}
+        messages={chatMessages}
+        typing={isBotTyping}
+        onSend={handleSendFollowUp}
+        onClose={() => setClarificationOpen(false)}
+      />
     </section>
   );
 };
