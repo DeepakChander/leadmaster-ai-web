@@ -19,7 +19,6 @@ const HeroSection = () => {
   const [loading, setLoading] = useState(false);
   const [progressIndex, setProgressIndex] = useState(0);
   const { leads, startNewSession, clear } = useLeadsRealtime("leads");
-  const [sessionStart, setSessionStart] = useState<Date | null>(null);
   const progressMessages = [
     "Searching Google Maps...",
     "Processing results...",
@@ -74,8 +73,6 @@ const HeroSection = () => {
 
     try {
       setLoading(true);
-      // Mark session start for CSV export filtering
-      setSessionStart(new Date());
 
       // Start a fresh session for new query
       sessionIdRef.current = generateSessionId();
@@ -255,7 +252,7 @@ const HeroSection = () => {
       </div>
 
       {/* Results */}
-      <LeadsResults leads={leads} sessionStart={sessionStart ?? undefined} />
+      <LeadsResults leads={leads} />
       <ClarificationChat
         open={isClarificationOpen}
         messages={chatMessages}

@@ -3,51 +3,13 @@ import { Button } from "@/components/ui/button";
 import { exportLeadsToCSV, openInGoogleSheets, type Lead } from "@/utils/export";
 import { Mail, Phone, Globe, MapPin, Download } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabaseClient";
-import { useState } from "react";
 
 interface LeadsResultsProps {
   leads: Lead[];
-  sessionStart?: Date;
 }
 
-const LeadsResults = ({ leads, sessionStart }: LeadsResultsProps) => {
+const LeadsResults = ({ leads }: LeadsResultsProps) => {
   const { toast } = useToast();
-  const [downloading, setDownloading] = useState(false);
-
-  const handleDownload = async (): Promise<void> => {
-    if (!leads?.length && !sessionStart) {
-      toast({ title: "No data", description: "No leads to export yet." });
-      return;
-    }
-    try {
-      setDownloading(true);
-      if (sessionStart) {
-        const sinceIso = sessionStart.toISOString();
-        const { data, error } = await (supabase
-          .from("leads")
-          .select("*")
-          .gte("created_at", sinceIso) as any).csv();
-        if (error) throw error;
-        const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.setAttribute("download", `leads_${new Date().toISOString().split("T")[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } else {
-        // Fallback to in-memory leads
-        exportLeadsToCSV(leads);
-      }
-    } catch (e: any) {
-      toast({ title: "Export failed", description: e?.message || "Could not download CSV", variant: "destructive" });
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   if (!leads?.length) return null;
 
@@ -57,8 +19,8 @@ const LeadsResults = ({ leads, sessionStart }: LeadsResultsProps) => {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">New Leads ({leads.length})</h2>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleDownload} disabled={downloading}>
-              <Download className="mr-2 h-4 w-4" /> {downloading ? "Preparing CSV..." : "Download CSV"}
+            <Button variant="outline" onClick={() => exportLeadsToCSV(leads)}>
+              <Download className="mr-2 h-4 w-4" /> Download CSV
             </Button>
             <Button variant="default" onClick={() => openInGoogleSheets(leads, toast)}>
               Open in Sheets
